@@ -34,13 +34,14 @@ use std::fmt;
   +---------------------------------------------------------------+
 */
 
+#[derive(Debug, Clone)]
 pub enum MessageType {
     // Client broadcast to locate available servers.
-    DHCPDISCOVER,
+    DHCPDISCOVER = 1,
 
     // Server to client in response to DHCPDISCOVER with
     // offer of configuration parameters
-    DHCPOFFER,
+    DHCPOFFER = 2,
 
     // Client message to servers either (a) requesting
     // offered parameters from one server and implicitly
@@ -48,29 +49,29 @@ pub enum MessageType {
     // correctness of previously allocated address after,
     // e.g., system reboot, or (c) extending the lease on a
     // particular network address.
-    DHCPREQUEST,
+    DHCPREQUEST = 3,
 
     // Server to client with configuration parameters,
     // including committed network address.
-    DHCPACK,
+    DHCPACK = 4,
 
     // Server to client indicating client's notion of network
     // address is incorrect (e.g., client has moved to new
     // subnet) or client's lease as expired
-    DHCPNAK,
+    DHCPNAK = 5,
 
     // Client to server indicating network address is already
     // in use.
-    DHCPDECLINE,
+    DHCPDECLINE = 6,
 
     // Client to server relinquishing network address and
     // cancelling remaining lease.
-    DHCPRELEASE,
+    DHCPRELEASE = 7,
 
     // Client to server, asking only for local configuration
     // parameters; client already has externally configured
     // network address.
-    DHCPINFORM,
+    DHCPINFORM = 8,
 }
 
 #[derive(Debug, Clone)]
@@ -119,7 +120,78 @@ pub struct Message {
     file: [u8; 128],
 
     /// Optional parameters field.  See the options documents for a list of defined options.
-    options: Vec<u8>,
+    options: OptionField,
+}
+
+#[derive(Debug, Clone)]
+pub struct OptionField {
+    magic_cookies: [u8; 4],
+    options: Vec<OptionSubfield>,
+    termination_bytes: u8,
+
+}
+#[derive(Debug, Clone)]
+pub struct OptionSubfield {
+    op_code: u8,
+    op_len: u8,
+    data: Vec<u8>
+}
+
+impl OptionSubfield {
+    pub fn new(op_code: u8, op_len: u8, data: Vec<u8>) -> OptionSubfield {
+        OptionSubfield { op_code, op_len, data}
+    }
+    pub fn from_bytes(input: Vec<u8>) -> OptionSubfield {
+        OptionSubfield { op_code: input[0], op_len: input[1], data: input[2..input.len()].to_vec() }
+    }
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = vec![self.op_code, self.op_len];
+        bytes.extend(&self.data);
+        bytes
+    }
+}
+impl OptionField {
+    pub fn new(magic_cookies: [u8; 4], options: Vec<OptionSubfield>, termination_bytes: u8) -> OptionField {
+        OptionField { magic_cookies, options, termination_bytes }
+    }
+    pub fn from_bytes(input: Vec<u8>) -> OptionField {
+        let magic_cookies: [u8; 4] = input[0..=3].try_into().expect("slice with incorrect length");
+        let mut offset = 4;
+        let mut options: Vec<OptionSubfield> = Vec::new();
+        while offset < input.len() -1 {
+            if input[offset] == 255 {
+                break;
+            }
+            let length: usize = input[offset+1].into() ;
+            options.push(OptionSubfield::from_bytes(input[offset..=offset + 1 + length].to_vec()));
+            offset += length +2;
+        }
+        OptionField { magic_cookies, options, termination_bytes: input[offset]}
+    }
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = self.magic_cookies.to_vec();
+        for op in self.options.iter() {
+            bytes.extend(&op.to_bytes());
+        }
+        bytes
+    }
+}
+
+impl fmt::Display for OptionSubfield {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "code: {} len: {} data: {:X?}", self.op_code, self.op_len, self.data)
+    }
+}
+
+impl fmt::Display for OptionField {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut res: String = String::from(format!("{{ magic_cookies : {:X?} subfield: [ ", self.magic_cookies));
+        for op in self.options.iter() {
+            res = res + &format!("{{ {} }},", op);
+        }
+        write!(f, "{}]", res)
+            
+    }
 }
 
 impl Message {
@@ -138,7 +210,7 @@ impl Message {
         chaddr: [u8; 16],
         sname: [u8; 64],
         file: [u8; 128],
-        options: Vec<u8>,
+        options: OptionField,
     ) -> Message {
         Message {
             op,
@@ -177,67 +249,90 @@ impl Message {
         res.extend_from_slice(&self.chaddr);
         res.extend_from_slice(&self.sname);
         res.extend_from_slice(&self.file);
-        res.extend(&self.options);
+        res.extend(&self.options.to_bytes());
         res
     }
     pub fn deserialize(buffer: Vec<u8>) -> Message {
-        println!("{:X?}", buffer);
+        let options_end = buffer[236..=buffer.len() - 1]
+            .iter()
+            .position(|&e| e == 255)
+            .unwrap();
         Message {
             op: buffer[0],
             htype: buffer[1],
             hlen: buffer[2],
             hops: buffer[3],
             xid: u32::from_be_bytes(
-                buffer[4..8]
+                buffer[4..=7]
                     .try_into()
                     .expect("slice with incorrect length"),
             ),
             secs: u16::from_be_bytes(
-                buffer[9..11]
+                buffer[8..=9]
                     .try_into()
                     .expect("slice with incorrect length"),
             ),
             flags: u16::from_be_bytes(
-                buffer[12..14]
+                buffer[10..=11]
                     .try_into()
                     .expect("slice with incorrect length"),
             ),
             ciaddr: u32::from_be_bytes(
-                buffer[15..19]
+                buffer[12..=15]
                     .try_into()
                     .expect("slice with incorrect length"),
             ),
             yiaddr: u32::from_be_bytes(
-                buffer[20..24]
+                buffer[16..=19]
                     .try_into()
                     .expect("slice with incorrect length"),
             ),
             siaddr: u32::from_be_bytes(
-                buffer[25..29]
+                buffer[20..=23]
                     .try_into()
                     .expect("slice with incorrect length"),
             ),
             giaddr: u32::from_be_bytes(
-                buffer[30..34]
+                buffer[24..=27]
                     .try_into()
                     .expect("slice with incorrect length"),
             ),
-            chaddr: buffer[35..51]
+            chaddr: buffer[28..=43]
                 .try_into()
                 .expect("slice with incorrect length"),
-            sname: buffer[52..116]
+            sname: buffer[44..=107]
                 .try_into()
                 .expect("slice with incorrect length"),
-            file: buffer[117..245]
+            file: buffer[108..=235]
                 .try_into()
                 .expect("slice with incorrect length"),
-            options: buffer[246..buffer.len() - 1].to_vec(),
+            options: OptionField::from_bytes(buffer[236..= 236+options_end].to_vec()),
         }
     }
 }
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "op = {:X}\thtype = {:X}\thlen = {:X}\thops = {:X}\txid = {:X}\tsecs = {:X}\tflags = {:X}\tciaddr = {:X}\tyiaddr = {:X}\tsiaddr = {:X}\tgiaddr = {:X}\tchaddr = {:X?}\tsname = {:X?}\tfile = {:X?}\t options = {:X?}", self.op, self.htype, self.hlen, self.hops, self.xid, self.secs, self.flags, self.ciaddr, self.yiaddr, self.siaddr, self.giaddr, self.chaddr, self.sname, self.file, self.options)
+        let ciaddr_bytes = self.ciaddr.to_be_bytes();
+        let yiaddr_bytes = self.yiaddr.to_be_bytes();
+        let siaddr_bytes = self.siaddr.to_be_bytes();
+        let giaddr_bytes = self.giaddr.to_be_bytes();
+        let ciaddr = format!(
+            "{}.{}.{}.{}",
+            ciaddr_bytes[0], ciaddr_bytes[1], ciaddr_bytes[2], ciaddr_bytes[3]
+        );
+        let yiaddr = format!(
+            "{}.{}.{}.{}",
+            yiaddr_bytes[0], yiaddr_bytes[1], yiaddr_bytes[2], yiaddr_bytes[3]
+        );
+        let siaddr = format!(
+            "{}.{}.{}.{}",
+            siaddr_bytes[0], siaddr_bytes[1], siaddr_bytes[2], siaddr_bytes[3]
+        );
+        let giaddr = format!(
+            "{}.{}.{}.{}",
+            giaddr_bytes[0], giaddr_bytes[1], giaddr_bytes[2], giaddr_bytes[3]
+        );
+        write!(f, "op = {:X}\thtype = {:X}\thlen = {:X}\thops = {:X}\txid = {:X}\tsecs = {:X}\tflags = {:X}\tciaddr = {}\tyiaddr = {}\tsiaddr = {}\tgiaddr = {}\tchaddr = {:X?}\tsname = {:X?}\tfile = {:X?}\t options = {}\n", self.op, self.htype, self.hlen, self.hops, self.xid, self.secs, self.flags, ciaddr, yiaddr, siaddr, giaddr, self.chaddr, self.sname, self.file, self.options)
     }
 }
