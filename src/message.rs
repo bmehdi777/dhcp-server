@@ -286,7 +286,9 @@ impl Message {
             .into();
 
         match dhcp_type {
-            MessageType::DHCPDISCOVER => {}
+            MessageType::DHCPDISCOVER => {
+
+            }
             _ => todo!(),
         }
     }
