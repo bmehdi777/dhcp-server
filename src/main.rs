@@ -2,6 +2,7 @@
 use std::net::UdpSocket;
 
 mod message;
+mod configuration;
 
 use message::{Message, MessageType};
 

@@ -239,7 +239,7 @@ impl fmt::Display for OptionField {
 
 impl Message {
     pub fn new(
-        fp: u8,
+        op: u8,
         htype: u8,
         hlen: u8,
         hops: u8,
