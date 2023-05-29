@@ -33,47 +33,6 @@ use std::fmt;
   |                          options (variable)                   |
   +---------------------------------------------------------------+
 */
-
-#[derive(Debug, Clone)]
-pub enum MessageType {
-    // Client broadcast to locate available servers.
-    DHCPDISCOVER = 1,
-
-    // Server to client in response to DHCPDISCOVER with
-    // offer of configuration parameters
-    DHCPOFFER = 2,
-
-    // Client message to servers either (a) requesting
-    // offered parameters from one server and implicitly
-    // declining offers from all others, (b) confirming
-    // correctness of previously allocated address after,
-    // e.g., system reboot, or (c) extending the lease on a
-    // particular network address.
-    DHCPREQUEST = 3,
-
-    // Server to client with configuration parameters,
-    // including committed network address.
-    DHCPACK = 4,
-
-    // Server to client indicating client's notion of network
-    // address is incorrect (e.g., client has moved to new
-    // subnet) or client's lease as expired
-    DHCPNAK = 5,
-
-    // Client to server indicating network address is already
-    // in use.
-    DHCPDECLINE = 6,
-
-    // Client to server relinquishing network address and
-    // cancelling remaining lease.
-    DHCPRELEASE = 7,
-
-    // Client to server, asking only for local configuration
-    // parameters; client already has externally configured
-    // network address.
-    DHCPINFORM = 8,
-}
-
 #[derive(Debug, Clone)]
 pub struct Message {
     // 1 = BOOTREQUEST, 2 = BOOTREPLY
@@ -124,25 +83,87 @@ pub struct Message {
 }
 
 #[derive(Debug, Clone)]
+pub enum MessageType {
+    // Client broadcast to locate available servers.
+    DHCPDISCOVER = 1,
+
+    // Server to client in response to DHCPDISCOVER with
+    // offer of configuration parameters
+    DHCPOFFER = 2,
+
+    // Client message to servers either (a) requesting
+    // offered parameters from one server and implicitly
+    // declining offers from all others, (b) confirming
+    // correctness of previously allocated address after,
+    // e.g., system reboot, or (c) extending the lease on a
+    // particular network address.
+    DHCPREQUEST = 3,
+
+    // Server to client with configuration parameters,
+    // including committed network address.
+    DHCPACK = 4,
+
+    // Server to client indicating client's notion of network
+    // address is incorrect (e.g., client has moved to new
+    // subnet) or client's lease as expired
+    DHCPNAK = 5,
+
+    // Client to server indicating network address is already
+    // in use.
+    DHCPDECLINE = 6,
+
+    // Client to server relinquishing network address and
+    // cancelling remaining lease.
+    DHCPRELEASE = 7,
+
+    // Client to server, asking only for local configuration
+    // parameters; client already has externally configured
+    // network address.
+    DHCPINFORM = 8,
+}
+impl From<u8> for MessageType {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => MessageType::DHCPDISCOVER,
+            2 => MessageType::DHCPOFFER,
+            3 => MessageType::DHCPREQUEST,
+            4 => MessageType::DHCPACK,
+            5 => MessageType::DHCPNAK,
+            6 => MessageType::DHCPDECLINE,
+            7 => MessageType::DHCPRELEASE,
+            8 => MessageType::DHCPINFORM,
+            _ => panic!("Couldn't parse {} as a DHCP Message", value),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct OptionField {
     magic_cookies: [u8; 4],
     options: Vec<OptionSubfield>,
     termination_bytes: u8,
-
 }
 #[derive(Debug, Clone)]
 pub struct OptionSubfield {
     op_code: u8,
     op_len: u8,
-    data: Vec<u8>
+    data: Vec<u8>,
 }
 
 impl OptionSubfield {
     pub fn new(op_code: u8, op_len: u8, data: Vec<u8>) -> OptionSubfield {
-        OptionSubfield { op_code, op_len, data}
+        OptionSubfield {
+            op_code,
+            op_len,
+            data,
+        }
     }
     pub fn from_bytes(input: Vec<u8>) -> OptionSubfield {
-        OptionSubfield { op_code: input[0], op_len: input[1], data: input[2..input.len()].to_vec() }
+        OptionSubfield {
+            op_code: input[0],
+            op_len: input[1],
+            data: input[2..input.len()].to_vec(),
+        }
     }
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = vec![self.op_code, self.op_len];
@@ -151,22 +172,38 @@ impl OptionSubfield {
     }
 }
 impl OptionField {
-    pub fn new(magic_cookies: [u8; 4], options: Vec<OptionSubfield>, termination_bytes: u8) -> OptionField {
-        OptionField { magic_cookies, options, termination_bytes }
+    pub fn new(
+        magic_cookies: [u8; 4],
+        options: Vec<OptionSubfield>,
+        termination_bytes: u8,
+    ) -> OptionField {
+        OptionField {
+            magic_cookies,
+            options,
+            termination_bytes,
+        }
     }
     pub fn from_bytes(input: Vec<u8>) -> OptionField {
-        let magic_cookies: [u8; 4] = input[0..=3].try_into().expect("slice with incorrect length");
+        let magic_cookies: [u8; 4] = input[0..=3]
+            .try_into()
+            .expect("slice with incorrect length");
         let mut offset = 4;
         let mut options: Vec<OptionSubfield> = Vec::new();
-        while offset < input.len() -1 {
+        while offset < input.len() - 1 {
             if input[offset] == 255 {
                 break;
             }
-            let length: usize = input[offset+1].into() ;
-            options.push(OptionSubfield::from_bytes(input[offset..=offset + 1 + length].to_vec()));
-            offset += length +2;
+            let length: usize = input[offset + 1].into();
+            options.push(OptionSubfield::from_bytes(
+                input[offset..=offset + 1 + length].to_vec(),
+            ));
+            offset += length + 2;
         }
-        OptionField { magic_cookies, options, termination_bytes: input[offset]}
+        OptionField {
+            magic_cookies,
+            options,
+            termination_bytes: input[offset],
+        }
     }
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = self.magic_cookies.to_vec();
@@ -179,24 +216,30 @@ impl OptionField {
 
 impl fmt::Display for OptionSubfield {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "code: {} len: {} data: {:X?}", self.op_code, self.op_len, self.data)
+        write!(
+            f,
+            "code: {} len: {} data: {:X?}",
+            self.op_code, self.op_len, self.data
+        )
     }
 }
 
 impl fmt::Display for OptionField {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut res: String = String::from(format!("{{ magic_cookies : {:X?} subfield: [ ", self.magic_cookies));
+        let mut res: String = String::from(format!(
+            "{{ magic_cookies : {:X?} subfield: [ ",
+            self.magic_cookies
+        ));
         for op in self.options.iter() {
             res = res + &format!("{{ {} }},", op);
         }
         write!(f, "{}]", res)
-            
     }
 }
 
 impl Message {
     pub fn new(
-        op: u8,
+        fp: u8,
         htype: u8,
         hlen: u8,
         hops: u8,
@@ -230,6 +273,23 @@ impl Message {
             options,
         }
     }
+    pub fn on_message(&self) {
+        let dhcp_type: MessageType = self
+            .options
+            .options
+            .iter()
+            .find(|e| e.op_code == 53)
+            .expect(
+                "DHCP Message MUST have a type field : msg did not contain 53 code in option field",
+            )
+            .data[0]
+            .into();
+
+        match dhcp_type {
+            MessageType::DHCPDISCOVER => {}
+            _ => todo!(),
+        }
+    }
     pub fn serialize(&self) -> Vec<u8> {
         let xid_bytes = self.xid.to_be_bytes();
         let secs_bytes = self.secs.to_be_bytes();
@@ -238,7 +298,9 @@ impl Message {
         let yiaddr_bytes = self.yiaddr.to_be_bytes();
         let siaddr_bytes = self.siaddr.to_be_bytes();
         let giaddr_bytes = self.giaddr.to_be_bytes();
+
         let mut res: Vec<u8> = vec![self.op, self.htype, self.hlen, self.hops];
+
         res.extend_from_slice(&xid_bytes);
         res.extend_from_slice(&secs_bytes);
         res.extend_from_slice(&flags_bytes);
@@ -250,6 +312,7 @@ impl Message {
         res.extend_from_slice(&self.sname);
         res.extend_from_slice(&self.file);
         res.extend(&self.options.to_bytes());
+
         res
     }
     pub fn deserialize(buffer: Vec<u8>) -> Message {
@@ -306,7 +369,7 @@ impl Message {
             file: buffer[108..=235]
                 .try_into()
                 .expect("slice with incorrect length"),
-            options: OptionField::from_bytes(buffer[236..= 236+options_end].to_vec()),
+            options: OptionField::from_bytes(buffer[236..=236 + options_end].to_vec()),
         }
     }
 }
