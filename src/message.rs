@@ -37,49 +37,49 @@ use std::fmt;
 pub struct Message {
     // 1 = BOOTREQUEST, 2 = BOOTREPLY
     ///  Message op code / message type.
-    op: u8,
+    pub op: u8,
 
     /// Hardware address type, see ARP section in "Assigned Numbers" RFC; e.g., '1' = 10mb ethernet.
-    htype: u8,
+    pub htype: u8,
 
     /// Hardware address length (e.g.  '6' for 10mb ethernet).
-    hlen: u8,
+    pub hlen: u8,
 
     /// Client sets to zero, optionally used by relay agents when booting via a relay agent.
-    hops: u8,
+    pub hops: u8,
 
     /// Transaction ID, a random number chosen by the client, used by the client and server to associate messages and responses between a client and a server.
-    xid: u32,
+    pub xid: u32,
 
     /// Filled in by client, seconds elapsed since client began address acquisition or renewal process.
-    secs: u16,
+    pub secs: u16,
 
     /// Flags
-    flags: u16,
+    pub flags: u16,
 
     /// Client IP address; only filled in if client is in BOUND, RENEW or REBINDING state and can respond to ARP requests.
-    ciaddr: u32,
+    pub ciaddr: u32,
 
     /// 'your' (client) IP address.
-    yiaddr: u32,
+    pub yiaddr: u32,
 
     /// IP address of next server to use in bootstrap; returned in DHCPOFFER, DHCPACK by server.
-    siaddr: u32,
+    pub siaddr: u32,
 
     /// Relay agent IP address, used in booting via a relay agent.
-    giaddr: u32,
+    pub giaddr: u32,
 
     /// Client hardware address.
-    chaddr: [u8; 16],
+    pub chaddr: [u8; 16],
 
     /// Optional server host name, null terminated string.
-    sname: [u8; 64],
+    pub sname: [u8; 64],
 
     /// Boot file name, null terminated string; "generic" name or null in DHCPDISCOVER, fully qualified directory-path name in DHCPOFFER.
-    file: [u8; 128],
+    pub file: [u8; 128],
 
     /// Optional parameters field.  See the options documents for a list of defined options.
-    options: OptionField,
+    pub options: OptionField,
 }
 
 #[derive(Debug, Clone)]
@@ -139,15 +139,15 @@ impl From<u8> for MessageType {
 
 #[derive(Debug, Clone)]
 pub struct OptionField {
-    magic_cookies: [u8; 4],
-    options: Vec<OptionSubfield>,
-    termination_bytes: u8,
+    pub magic_cookies: [u8; 4],
+    pub options: Vec<OptionSubfield>,
+    pub termination_bytes: u8,
 }
 #[derive(Debug, Clone)]
 pub struct OptionSubfield {
-    op_code: u8,
-    op_len: u8,
-    data: Vec<u8>,
+    pub op_code: u8,
+    pub op_len: u8,
+    pub data: Vec<u8>,
 }
 
 impl OptionSubfield {
@@ -189,16 +189,26 @@ impl OptionField {
             .expect("slice with incorrect length");
         let mut offset = 4;
         let mut options: Vec<OptionSubfield> = Vec::new();
+
         while offset < input.len() - 1 {
-            if input[offset] == 255 {
-                break;
+            match input[offset] {
+                255 => {
+                    break;
+                }
+                0 => {
+                    // pad
+                    offset += 1;
+                }
+                _ => {
+                    let length: usize = input[offset + 1].into();
+                    options.push(OptionSubfield::from_bytes(
+                        input[offset..=offset + 1 + length].to_vec(),
+                    ));
+                    offset += length + 2;
+                }
             }
-            let length: usize = input[offset + 1].into();
-            options.push(OptionSubfield::from_bytes(
-                input[offset..=offset + 1 + length].to_vec(),
-            ));
-            offset += length + 2;
         }
+
         OptionField {
             magic_cookies,
             options,
