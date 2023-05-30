@@ -1,6 +1,24 @@
 use std::net::UdpSocket;
+use std::collections::HashMap;
 
 use crate::message::*;
+use crate::configuration::*;
+
+pub enum DhcpState {
+    INIT,
+    SELECTING,
+    REQUESTING,
+    INITREBOOT,
+    REBOOTING,
+    BOUND,
+    RENEWING,
+    REBINDING
+}
+
+pub struct Client {
+    state: DhcpState,
+
+}
 
 pub struct DhcpServer {
     socket: UdpSocket,
@@ -33,7 +51,8 @@ impl DhcpServer {
                 .into();
 
             match dhcp_type {
-                MessageType::DHCPDISCOVER => {}
+                MessageType::DHCPDISCOVER => {
+                }
                 _ => todo!(),
             }
             println!("Message debug : {}", msg);

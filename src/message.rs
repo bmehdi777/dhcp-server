@@ -1,5 +1,7 @@
 use crate::configuration::*;
 use std::fmt;
+use std::net::Ipv4Addr;
+
 /**
 * Format of a dhcp message
 * 0                   1                   2                   3
@@ -59,16 +61,16 @@ pub struct Message {
     pub flags: u16,
 
     /// Client IP address; only filled in if client is in BOUND, RENEW or REBINDING state and can respond to ARP requests.
-    pub ciaddr: u32,
+    pub ciaddr: Ipv4Addr,
 
     /// 'your' (client) IP address.
-    pub yiaddr: u32,
+    pub yiaddr: Ipv4Addr,
 
     /// IP address of next server to use in bootstrap; returned in DHCPOFFER, DHCPACK by server.
-    pub siaddr: u32,
+    pub siaddr: Ipv4Addr,
 
     /// Relay agent IP address, used in booting via a relay agent.
-    pub giaddr: u32,
+    pub giaddr: Ipv4Addr,
 
     /// Client hardware address.
     pub chaddr: [u8; 16],
@@ -257,10 +259,10 @@ impl Message {
         xid: u32,
         secs: u16,
         flags: u16,
-        ciaddr: u32,
-        yiaddr: u32,
-        siaddr: u32,
-        giaddr: u32,
+        ciaddr: Ipv4Addr,
+        yiaddr: Ipv4Addr,
+        siaddr: Ipv4Addr,
+        giaddr: Ipv4Addr,
         chaddr: [u8; 16],
         sname: [u8; 64],
         file: [u8; 128],
@@ -307,10 +309,10 @@ impl Message {
         let xid_bytes = self.xid.to_be_bytes();
         let secs_bytes = self.secs.to_be_bytes();
         let flags_bytes = self.flags.to_be_bytes();
-        let ciaddr_bytes = self.ciaddr.to_be_bytes();
-        let yiaddr_bytes = self.yiaddr.to_be_bytes();
-        let siaddr_bytes = self.siaddr.to_be_bytes();
-        let giaddr_bytes = self.giaddr.to_be_bytes();
+        let ciaddr_bytes = self.ciaddr.octets().to_vec();
+        let yiaddr_bytes = self.yiaddr.octets().to_vec();
+        let siaddr_bytes = self.siaddr.octets().to_vec();
+        let giaddr_bytes = self.giaddr.octets().to_vec();
 
         let mut res: Vec<u8> = vec![self.op, self.htype, self.hlen, self.hops];
 
@@ -353,26 +355,10 @@ impl Message {
                     .try_into()
                     .expect("slice with incorrect length"),
             ),
-            ciaddr: u32::from_be_bytes(
-                buffer[12..=15]
-                    .try_into()
-                    .expect("slice with incorrect length"),
-            ),
-            yiaddr: u32::from_be_bytes(
-                buffer[16..=19]
-                    .try_into()
-                    .expect("slice with incorrect length"),
-            ),
-            siaddr: u32::from_be_bytes(
-                buffer[20..=23]
-                    .try_into()
-                    .expect("slice with incorrect length"),
-            ),
-            giaddr: u32::from_be_bytes(
-                buffer[24..=27]
-                    .try_into()
-                    .expect("slice with incorrect length"),
-            ),
+            ciaddr: Ipv4Addr::new(buffer[12], buffer[13], buffer[14], buffer[15]),
+            yiaddr: Ipv4Addr::new(buffer[16], buffer[17], buffer[18], buffer[19]),
+            siaddr: Ipv4Addr::new(buffer[20], buffer[21], buffer[22], buffer[23]),
+            giaddr: Ipv4Addr::new(buffer[24], buffer[25], buffer[26], buffer[27]),
             chaddr: buffer[28..=43]
                 .try_into()
                 .expect("slice with incorrect length"),
@@ -389,26 +375,6 @@ impl Message {
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let ciaddr_bytes = self.ciaddr.to_be_bytes();
-        let yiaddr_bytes = self.yiaddr.to_be_bytes();
-        let siaddr_bytes = self.siaddr.to_be_bytes();
-        let giaddr_bytes = self.giaddr.to_be_bytes();
-        let ciaddr = format!(
-            "{}.{}.{}.{}",
-            ciaddr_bytes[0], ciaddr_bytes[1], ciaddr_bytes[2], ciaddr_bytes[3]
-        );
-        let yiaddr = format!(
-            "{}.{}.{}.{}",
-            yiaddr_bytes[0], yiaddr_bytes[1], yiaddr_bytes[2], yiaddr_bytes[3]
-        );
-        let siaddr = format!(
-            "{}.{}.{}.{}",
-            siaddr_bytes[0], siaddr_bytes[1], siaddr_bytes[2], siaddr_bytes[3]
-        );
-        let giaddr = format!(
-            "{}.{}.{}.{}",
-            giaddr_bytes[0], giaddr_bytes[1], giaddr_bytes[2], giaddr_bytes[3]
-        );
-        write!(f, "op = {:X}\thtype = {:X}\thlen = {:X}\thops = {:X}\txid = {:X}\tsecs = {:X}\tflags = {:X}\tciaddr = {}\tyiaddr = {}\tsiaddr = {}\tgiaddr = {}\tchaddr = {:X?}\tsname = {:X?}\tfile = {:X?}\t options = {}\n", self.op, self.htype, self.hlen, self.hops, self.xid, self.secs, self.flags, ciaddr, yiaddr, siaddr, giaddr, self.chaddr, self.sname, self.file, self.options)
+        write!(f, "op = {:X}\thtype = {:X}\thlen = {:X}\thops = {:X}\txid = {:X}\tsecs = {:X}\tflags = {:X}\tciaddr = {}\tyiaddr = {}\tsiaddr = {}\tgiaddr = {}\tchaddr = {:X?}\tsname = {:X?}\tfile = {:X?}\t options = {}\n", self.op, self.htype, self.hlen, self.hops, self.xid, self.secs, self.flags, self.ciaddr, self.yiaddr, self.siaddr, self.giaddr, self.chaddr, self.sname, self.file, self.options)
     }
 }

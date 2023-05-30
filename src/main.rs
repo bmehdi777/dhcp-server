@@ -9,5 +9,6 @@ fn main() {
     // May be usefull when I will look at the broadcast flag
     //socket.set_broadcast(true)?;
     let server = dhcp::DhcpServer::new();
+    println!("INFO: server started on 127.0.0.1:67\n");
     server.on_recv();
 }
