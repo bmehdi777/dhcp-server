@@ -15,7 +15,10 @@ impl DhcpServer {
     pub fn on_recv(&self) {
         loop {
             let mut buffer = [0; 576];
-            let (num_byte, src_addr) = self.socket.recv_from(&mut buffer).expect("ERR: An error occured while receiving bytes");
+            let (num_byte, src_addr) = self
+                .socket
+                .recv_from(&mut buffer)
+                .expect("ERR: An error occured while receiving bytes");
             let msg: Message = Message::deserialize(buffer.to_vec());
 
             let dhcp_type: MessageType = msg

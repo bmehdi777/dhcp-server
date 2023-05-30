@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::configuration::*;
+use std::fmt;
 /**
 * Format of a dhcp message
 * 0                   1                   2                   3
