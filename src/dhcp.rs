@@ -1,29 +1,27 @@
-use std::net::UdpSocket;
 use std::collections::HashMap;
+use std::net::{Ipv4Addr, UdpSocket};
 
-use crate::message::*;
 use crate::configuration::*;
+use crate::message::*;
 
-pub enum DhcpState {
-    INIT,
-    SELECTING,
-    REQUESTING,
-    INITREBOOT,
-    REBOOTING,
-    BOUND,
-    RENEWING,
-    REBINDING
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum PoolAddrState {
+    FREE,
+    BOUND
 }
 
-pub struct Client {
-    state: DhcpState,
+pub struct Pool {
+    item: HashMap<Client, PoolAddrState>, // name to changes, just trying things here
+}
 
+#[derive(PartialEq, Eq, Hash)]
+pub struct Client {
+    address: Ipv4Addr,
 }
 
 pub struct DhcpServer {
     socket: UdpSocket,
 }
-
 impl DhcpServer {
     pub fn new() -> DhcpServer {
         DhcpServer {
@@ -52,6 +50,14 @@ impl DhcpServer {
 
             match dhcp_type {
                 MessageType::DHCPDISCOVER => {
+                    let mut pool_available: HashMap<Client, PoolAddrState> = HashMap::new();
+                    pool_available.insert(
+                        Client {
+                            address: Ipv4Addr::new(127, 0, 0, 2),
+                        },
+                        PoolAddrState::FREE,
+                    );
+                    let t: Vec<&Client> = pool_available.iter().filter_map(|(key, &value)| if value == PoolAddrState::FREE { Some(key)} else {None}).collect();
                 }
                 _ => todo!(),
             }
