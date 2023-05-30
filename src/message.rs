@@ -1,4 +1,5 @@
 use std::fmt;
+use crate::configuration::*;
 /**
 * Format of a dhcp message
 * 0                   1                   2                   3
@@ -290,13 +291,15 @@ impl Message {
             .iter()
             .find(|e| e.op_code == 53)
             .expect(
-                "DHCP Message MUST have a type field : msg did not contain 53 code in option field",
+                "DHCP Message MUST have a type field : message did not contain 53 code in option field",
             )
             .data[0]
             .into();
 
         match dhcp_type {
-            MessageType::DHCPDISCOVER => {}
+            MessageType::DHCPDISCOVER => {
+                let conf = Configuration::default();
+            }
             _ => todo!(),
         }
     }
