@@ -9,15 +9,34 @@ pub enum PoolAddrState {
     FREE,
     BOUND
 }
-
-pub struct Pool {
-    item: HashMap<Client, PoolAddrState>, // name to changes, just trying things here
-}
-
 #[derive(PartialEq, Eq, Hash)]
 pub struct Client {
     address: Ipv4Addr,
 }
+
+pub struct Pool {
+    pub configuration: Configuration,
+    pub addr_used: HashMap<Client, Ipv4Addr>,
+}
+impl Pool {
+    pub fn new(configuration: Configuration) -> Pool {
+        Pool { configuration, addr_used: HashMap::new() }
+    }
+    pub fn use_addr(&mut self, client: Client, addr: Ipv4Addr) -> Result<(), &'static str> {
+        if let Some(_) = self.addr_used.iter().find(|(key, &value)| value == addr) {
+            return Err("ERR: the addr is already used");
+        }
+        self.addr_used.insert(client, addr);
+        Ok(())
+    }
+    pub fn release_addr(&mut self, addr: Ipv4Addr) -> Result<(), &'static str> {
+        if let Some(item) = self.addr_used.iter().find(|(key, &value)| value == addr) {
+            self.addr_used.remove(item.to_owned().0);
+        }
+        Err("ERR: unable to find the addr")
+    }
+}
+
 
 pub struct DhcpServer {
     socket: UdpSocket,
