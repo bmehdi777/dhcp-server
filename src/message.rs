@@ -85,6 +85,12 @@ pub struct Message {
     pub options: OptionField,
 }
 
+#[repr(u8)]
+pub enum OpCode {
+    BOOTREQUEST = 1,
+    BOOTREPLY = 2,
+}
+
 #[derive(Debug, Clone)]
 pub enum MessageType {
     // Client broadcast to locate available servers.
@@ -144,7 +150,6 @@ impl From<u8> for MessageType {
 pub struct OptionField {
     pub magic_cookies: [u8; 4],
     pub options: Vec<OptionSubfield>,
-    pub termination_bytes: u8,
 }
 #[derive(Debug, Clone)]
 pub struct OptionSubfield {
@@ -176,14 +181,11 @@ impl OptionSubfield {
 }
 impl OptionField {
     pub fn new(
-        magic_cookies: [u8; 4],
         options: Vec<OptionSubfield>,
-        termination_bytes: u8,
     ) -> OptionField {
         OptionField {
-            magic_cookies,
+            magic_cookies: [99,130,83,99], // set by rfc 1497
             options,
-            termination_bytes,
         }
     }
     pub fn from_bytes(input: Vec<u8>) -> OptionField {
@@ -215,7 +217,6 @@ impl OptionField {
         OptionField {
             magic_cookies,
             options,
-            termination_bytes: input[offset],
         }
     }
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -223,6 +224,7 @@ impl OptionField {
         for op in self.options.iter() {
             bytes.extend(&op.to_bytes());
         }
+        bytes.push(255); // termination bytes
         bytes
     }
 }

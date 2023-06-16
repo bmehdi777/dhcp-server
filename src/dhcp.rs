@@ -8,7 +8,7 @@ use crate::message::*;
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum PoolAddrState {
     FREE,
-    BOUND
+    BOUND,
 }
 
 pub struct Pool {
@@ -17,7 +17,8 @@ pub struct Pool {
 }
 impl Pool {
     pub fn new(configuration: Configuration) -> Pool {
-        Pool { configuration, addr_used: HashMap::new() }
+        Pool {
+            configuration, addr_used: HashMap::new(), }
     }
     pub fn use_addr(&mut self, addr: Ipv4Addr, hardware_addr: String) -> Result<(), &'static str> {
         if let Some(_) = self.addr_used.get(&addr) {
@@ -32,8 +33,10 @@ impl Pool {
         }
         Ok(())
     }
+    pub fn choose_addr(&mut self) -> Result<Ipv4Addr, &'static str> {
+        unimplemented!();
+    }
 }
-
 
 pub struct DhcpServer {
     socket: UdpSocket,
@@ -45,6 +48,12 @@ impl DhcpServer {
         }
     }
     pub fn on_recv(&self) {
+        let mut pool: Pool = Pool::new(Configuration::new(AddressRange::new(
+            Ipv4Addr::new(192, 168, 0, 1).octets(),
+            Ipv4Addr::new(192, 168, 0, 10).octets(),
+            [255, 255, 255, 0],
+        )));
+
         loop {
             let mut buffer = [0; 576];
             let (num_byte, src_addr) = self
@@ -68,18 +77,61 @@ impl DhcpServer {
 
             match dhcp_type {
                 MessageType::DHCPDISCOVER => {
-                    let mut pool_available: HashMap<Client, PoolAddrState> = HashMap::new();
-                    pool_available.insert(
-                        Client {
-                            address: Ipv4Addr::new(127, 0, 0, 2),
-                        },
-                        PoolAddrState::FREE,
-                    );
-                    let t: Vec<&Client> = pool_available.iter().filter_map(|(key, &value)| if value == PoolAddrState::FREE { Some(key)} else {None}).collect();
+                    // Server should respond with a DHCPOFFER message
+
+
                 }
                 _ => todo!(),
             }
             println!("Message debug : {}", msg);
         }
+    }
+    fn send<T>(&self, message: Message, dest: T)
+    where
+        T: std::net::ToSocketAddrs,
+    {
+        self.socket.send_to(&message.serialize(), dest);
+    }
+    fn send_offer<T>(&self, source: Message, dest: T)
+    where 
+        T: std::net::ToSocketAddrs,
+    {
+        /**
+         * Field      DHCPOFFER 
+         * -----      ---------            
+         * 'op'       BOOTREPLY           
+         * 'htype'    (From "Assigned Numbers" RFC)
+         * 'hlen'     (Hardware address length in octets)
+         * 'hops'     0                    
+         * 'xid'      'xid' from client DHCPDISCOVER message             
+         * 'secs'     0                    
+         * 'ciaddr'   0                    
+         * 'yiaddr'   IP address offered to client            
+         * 'siaddr'   IP address of next bootstrap server    
+         * 'flags'    'flags' from client DHCPDISCOVER message              
+         * 'giaddr'   'giaddr' from client DHCPDISCOVER message              
+         * 'chaddr'   'chaddr' from client DHCPDISCOVER message             
+         * 'sname'    Server host name or options           
+         * 'file'     Client boot file name or options      
+         * 'options'  options         
+         */
+
+        // op: u8,
+        // htype: u8,
+        // hlen: u8,
+        // hops: u8,
+        // xid: u32,
+        // secs: u16,
+        // flags: u16,
+        // ciaddr: Ipv4Addr,
+        // yiaddr: Ipv4Addr,
+        // siaddr: Ipv4Addr,
+        // giaddr: Ipv4Addr,
+        // chaddr: [u8; 16],
+        // sname: [u8; 64],
+        // file: [u8; 128],
+        // options: OptionField,
+
+        let response: Message = Message::new(OpCode::BOOTREPLY as u8, source.htype, source.hlen, 0, source.xid, 0, source.flags, Ipv4Addr::new(0,0,0,0), todo!(), todo!(), source.giaddr, source.chaddr, [0u8; 64], [0u8; 128], OptionField::new(vec![]));
     }
 }
