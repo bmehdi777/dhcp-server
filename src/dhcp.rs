@@ -116,22 +116,9 @@ impl DhcpServer {
          * 'options'  options         
          */
 
-        // op: u8,
-        // htype: u8,
-        // hlen: u8,
-        // hops: u8,
-        // xid: u32,
-        // secs: u16,
-        // flags: u16,
-        // ciaddr: Ipv4Addr,
-        // yiaddr: Ipv4Addr,
-        // siaddr: Ipv4Addr,
-        // giaddr: Ipv4Addr,
-        // chaddr: [u8; 16],
-        // sname: [u8; 64],
-        // file: [u8; 128],
-        // options: OptionField,
-
         let response: Message = Message::new(OpCode::BOOTREPLY as u8, source.htype, source.hlen, 0, source.xid, 0, source.flags, Ipv4Addr::new(0,0,0,0), todo!(), todo!(), source.giaddr, source.chaddr, [0u8; 64], [0u8; 128], OptionField::new(vec![]));
+
+        // TODO : add apropriate option on the response message and use
+        // self.send to send it over the network
     }
 }
