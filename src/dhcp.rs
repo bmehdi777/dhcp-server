@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, UdpSocket};
+//use pretty_hex::pretty_hex;
 
 use crate::configuration::*;
 use crate::message::*;
@@ -9,31 +10,27 @@ pub enum PoolAddrState {
     FREE,
     BOUND
 }
-#[derive(PartialEq, Eq, Hash)]
-pub struct Client {
-    address: Ipv4Addr,
-}
 
 pub struct Pool {
     pub configuration: Configuration,
-    pub addr_used: HashMap<Client, Ipv4Addr>,
+    pub addr_used: HashMap<Ipv4Addr, String>,
 }
 impl Pool {
     pub fn new(configuration: Configuration) -> Pool {
         Pool { configuration, addr_used: HashMap::new() }
     }
-    pub fn use_addr(&mut self, client: Client, addr: Ipv4Addr) -> Result<(), &'static str> {
-        if let Some(_) = self.addr_used.iter().find(|(key, &value)| value == addr) {
-            return Err("ERR: the addr is already used");
+    pub fn use_addr(&mut self, addr: Ipv4Addr, hardware_addr: String) -> Result<(), &'static str> {
+        if let Some(_) = self.addr_used.get(&addr) {
+            return Err("ERR: the address is already used");
         }
-        self.addr_used.insert(client, addr);
+        self.addr_used.insert(addr, hardware_addr);
         Ok(())
     }
     pub fn release_addr(&mut self, addr: Ipv4Addr) -> Result<(), &'static str> {
-        if let Some(item) = self.addr_used.iter().find(|(key, &value)| value == addr) {
-            self.addr_used.remove(item.to_owned().0);
+        if let None = self.addr_used.remove(&addr) {
+            return Err("ERR: unable to find the address to remove");
         }
-        Err("ERR: unable to find the addr")
+        Ok(())
     }
 }
 
@@ -54,6 +51,8 @@ impl DhcpServer {
                 .socket
                 .recv_from(&mut buffer)
                 .expect("ERR: An error occured while receiving bytes");
+
+            //println!("Pretty hex : {}", pretty_hex(&buffer));
             let msg: Message = Message::deserialize(buffer.to_vec());
 
             let dhcp_type: MessageType = msg
