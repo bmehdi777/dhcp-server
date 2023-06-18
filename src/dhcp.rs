@@ -18,7 +18,9 @@ pub struct Pool {
 impl Pool {
     pub fn new(configuration: Configuration) -> Pool {
         Pool {
-            configuration, addr_used: HashMap::new(), }
+            configuration,
+            addr_used: HashMap::new(),
+        }
     }
     pub fn use_addr(&mut self, addr: Ipv4Addr, hardware_addr: String) -> Result<(), &'static str> {
         if let Some(_) = self.addr_used.get(&addr) {
@@ -78,26 +80,24 @@ impl DhcpServer {
             match dhcp_type {
                 MessageType::DHCPDISCOVER => {
                     // Server should respond with a DHCPOFFER message
-
-
                 }
                 _ => todo!(),
             }
             println!("Message debug : {}", msg);
         }
     }
-    fn send<T>(&self, message: Message, dest: T)
+    fn send<T>(&self, message: Message, dest: T) -> Result<usize, std::io::Error>
     where
         T: std::net::ToSocketAddrs,
     {
-        self.socket.send_to(&message.serialize(), dest);
+        self.socket.send_to(&message.serialize(), dest)
     }
-    fn send_offer<T>(&self, source: Message, dest: T)
-    where 
+    fn send_offer<T>(&self, source: Message, dest: T) -> Result<usize, std::io::Error>
+    where
         T: std::net::ToSocketAddrs,
     {
         /**
-         * Field      DHCPOFFER 
+         * Field      DHCPOFFER
          * -----      ---------            
          * 'op'       BOOTREPLY           
          * 'htype'    (From "Assigned Numbers" RFC)
@@ -115,10 +115,25 @@ impl DhcpServer {
          * 'file'     Client boot file name or options      
          * 'options'  options         
          */
-
-        let response: Message = Message::new(OpCode::BOOTREPLY as u8, source.htype, source.hlen, 0, source.xid, 0, source.flags, Ipv4Addr::new(0,0,0,0), todo!(), todo!(), source.giaddr, source.chaddr, [0u8; 64], [0u8; 128], OptionField::new(vec![]));
+        let response: Message = Message::new(
+            OpCode::BOOTREPLY as u8,
+            source.htype,
+            source.hlen,
+            0,
+            source.xid,
+            0,
+            source.flags,
+            Ipv4Addr::new(0, 0, 0, 0),
+            todo!(),
+            todo!(),
+            source.giaddr,
+            source.chaddr,
+            [0u8; 64],
+            [0u8; 128],
+            OptionField::new(vec![]),
+        );
 
         // TODO : add apropriate option on the response message and use
-        // self.send to send it over the network
+        self.send(response, dest)
     }
 }
