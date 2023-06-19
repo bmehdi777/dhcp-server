@@ -1,42 +1,48 @@
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, UdpSocket};
+use std::time::Duration;
 //use pretty_hex::pretty_hex;
 
 use crate::configuration::*;
 use crate::message::*;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
-pub enum PoolAddrState {
+pub enum AddrState {
     FREE,
+    OFFERED,
     BOUND,
+}
+
+#[derive(PartialEq, Eq, Clone)]
+pub struct Client {
+    state: AddrState,
+    address: Ipv4Addr,
+    lease: Duration,
 }
 
 pub struct Pool {
     pub configuration: Configuration,
-    pub addr_used: HashMap<Ipv4Addr, String>,
+    pub reservation: HashMap<String, Client>,
 }
 impl Pool {
     pub fn new(configuration: Configuration) -> Pool {
         Pool {
             configuration,
-            addr_used: HashMap::new(),
+            reservation: HashMap::new(),
         }
     }
-    pub fn use_addr(&mut self, addr: Ipv4Addr, hardware_addr: String) -> Result<(), &'static str> {
-        if let Some(_) = self.addr_used.get(&addr) {
-            return Err("ERR: the address is already used");
-        }
-        self.addr_used.insert(addr, hardware_addr);
-        Ok(())
+    pub fn allocate(&mut self, addr: Ipv4Addr) -> Result<Ipv4Addr, &'static str> {
+        todo!()
     }
-    pub fn release_addr(&mut self, addr: Ipv4Addr) -> Result<(), &'static str> {
-        if let None = self.addr_used.remove(&addr) {
-            return Err("ERR: unable to find the address to remove");
+    fn is_free(&self, addr: Ipv4Addr, hardware: String) -> bool {
+        if self.configuration.range.end_address.cmp(&addr.octets()) != std::cmp::Ordering::Less {
+            return false;
         }
-        Ok(())
-    }
-    pub fn choose_addr(&mut self) -> Result<Ipv4Addr, &'static str> {
-        unimplemented!();
+
+        match self.reservation.get(&format!("{} {}", u32::from(addr), hardware)) {
+            Some(_) => return false,
+            None => return true,
+        }
     }
 }
 
@@ -115,6 +121,8 @@ impl DhcpServer {
          * 'file'     Client boot file name or options      
          * 'options'  options         
          */
+        let yiaddr: Ipv4Addr = todo!();
+        let siaddr: Ipv4Addr = todo!();
         let response: Message = Message::new(
             OpCode::BOOTREPLY as u8,
             source.htype,
@@ -124,8 +132,8 @@ impl DhcpServer {
             0,
             source.flags,
             Ipv4Addr::new(0, 0, 0, 0),
-            todo!(),
-            todo!(),
+            yiaddr, // yiaddr
+            siaddr, // siaddr
             source.giaddr,
             source.chaddr,
             [0u8; 64],

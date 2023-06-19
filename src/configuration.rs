@@ -7,14 +7,14 @@ const CONFIGURATION_FILENAME: &str = "dhcp-server.toml";
 
 #[derive(Deserialize, Serialize)]
 pub struct Configuration {
-    range: AddressRange,
+    pub range: AddressRange,
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct AddressRange {
-    start_address: [u8; 4],
-    end_address: [u8; 4],
-    subnet_mask: [u8; 4],
+    pub start_address: [u8; 4],
+    pub end_address: [u8; 4],
+    pub subnet_mask: [u8; 4],
 }
 
 impl AddressRange {
