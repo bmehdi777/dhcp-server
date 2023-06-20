@@ -125,7 +125,7 @@ impl DhcpServer {
             //println!("Pretty hex : {}", pretty_hex(&buffer));
             let msg: Message = Message::deserialize(buffer.to_vec());
 
-            println!("INFO: Message received : {}", &msg);
+            println!("DEBUG: Message received : {}", &msg);
 
             let dhcp_type: MessageType = msg
                 .options
@@ -208,7 +208,7 @@ impl DhcpServer {
             OptionField::new(vec![]),
         );
 
-        println!("INFO: message sended : {}\n", &response);
+        println!("DEBUG: message sended : {}\n", &response);
         // TODO : add apropriate option on the response message and use
         self.send(response, dest)
     }

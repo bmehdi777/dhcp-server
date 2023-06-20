@@ -248,7 +248,7 @@ impl fmt::Display for OptionField {
         for op in self.options.iter() {
             res = res + &format!("{{ {} }},", op);
         }
-        write!(f, "{}]", res)
+        write!(f, "{}] }}", res)
     }
 }
 
