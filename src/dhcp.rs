@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, UdpSocket};
-use std::time::Duration;
-//use pretty_hex::pretty_hex;
+use std::time::Duration; //use pretty_hex::pretty_hex;
 
 use crate::configuration::*;
 use crate::message::*;
+
+// Default lease set to 2h, maybe change that in configuration later ?
+const DEFAULT_LEASE: Duration = Duration::new(7200, 0);
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum AddrState {
@@ -17,32 +19,82 @@ pub enum AddrState {
 pub struct Client {
     state: AddrState,
     address: Ipv4Addr,
+    hostname: String,
+    mac: String,
     lease: Duration,
+}
+impl Default for Client {
+    fn default() -> Self {
+        Client {
+            state: AddrState::FREE,
+            address: Ipv4Addr::new(0, 0, 0, 0),
+            hostname: String::new(),
+            mac: String::new(),
+            lease: DEFAULT_LEASE,
+        }
+    }
+}
+impl Client {
+    pub fn init(address: Ipv4Addr) -> Self {
+        Client {
+            address,
+            ..Default::default()
+        }
+    }
+    pub fn new(
+        state: AddrState,
+        address: Ipv4Addr,
+        hostname: String,
+        mac: String,
+        lease: Duration,
+    ) -> Self {
+        Client {
+            state,
+            address,
+            hostname,
+            mac,
+            lease,
+        }
+    }
 }
 
 pub struct Pool {
     pub configuration: Configuration,
-    pub reservation: HashMap<String, Client>,
+    pub reservation: Vec<Client>,
 }
 impl Pool {
-    pub fn new(configuration: Configuration) -> Pool {
+    pub fn new(configuration: Configuration) -> Self {
         Pool {
             configuration,
-            reservation: HashMap::new(),
+            reservation: Vec::new(),
         }
+    }
+    pub fn init(mut self) -> Self {
+        let start_addr: u32 = self.configuration.range.start_address.into();
+        let end_addr: u32 = self.configuration.range.end_address.into();
+        let size_addr: u32 = end_addr - start_addr;
+        let mut reservation: Vec<Client> = Vec::new();
+        for i in 0..size_addr {
+            self.reservation.push(Client::init((start_addr + i).into()));
+        }
+        self
     }
     pub fn allocate(&mut self, addr: Ipv4Addr) -> Result<Ipv4Addr, &'static str> {
         todo!()
     }
     fn is_free(&self, addr: Ipv4Addr, hardware: String) -> bool {
-        if self.configuration.range.end_address.cmp(&addr.octets()) != std::cmp::Ordering::Less {
+        if self.configuration.range.end_address.cmp(&addr) != std::cmp::Ordering::Less
+            && self.configuration.range.start_address.cmp(&addr) == std::cmp::Ordering::Less
+        {
             return false;
         }
 
-        match self.reservation.get(&format!("{} {}", u32::from(addr), hardware)) {
-            Some(_) => return false,
-            None => return true,
+        for (index, client) in self.reservation.iter().enumerate() {
+            if client.address == addr && client.state == AddrState::FREE {
+                return true;
+            }
         }
+        false
     }
 }
 
@@ -57,10 +109,11 @@ impl DhcpServer {
     }
     pub fn on_recv(&self) {
         let mut pool: Pool = Pool::new(Configuration::new(AddressRange::new(
-            Ipv4Addr::new(192, 168, 0, 1).octets(),
-            Ipv4Addr::new(192, 168, 0, 10).octets(),
-            [255, 255, 255, 0],
-        )));
+            Ipv4Addr::new(192, 168, 0, 1),
+            Ipv4Addr::new(192, 168, 0, 10),
+            Ipv4Addr::new(255, 255, 255, 0),
+        )))
+        .init();
 
         loop {
             let mut buffer = [0; 576];
@@ -71,6 +124,8 @@ impl DhcpServer {
 
             //println!("Pretty hex : {}", pretty_hex(&buffer));
             let msg: Message = Message::deserialize(buffer.to_vec());
+
+            println!("INFO: Message received : {}", &msg);
 
             let dhcp_type: MessageType = msg
                 .options
@@ -86,10 +141,17 @@ impl DhcpServer {
             match dhcp_type {
                 MessageType::DHCPDISCOVER => {
                     // Server should respond with a DHCPOFFER message
+                    self.send_offer(&msg, src_addr);
+                },
+                MessageType::DHCPREQUEST => {
+                    // Server should respond with a DHCPACK message
+
+                },
+                MessageType::DHCPRELEASE => {
+                    // Release address
                 }
                 _ => todo!(),
             }
-            println!("Message debug : {}", msg);
         }
     }
     fn send<T>(&self, message: Message, dest: T) -> Result<usize, std::io::Error>
@@ -98,7 +160,7 @@ impl DhcpServer {
     {
         self.socket.send_to(&message.serialize(), dest)
     }
-    fn send_offer<T>(&self, source: Message, dest: T) -> Result<usize, std::io::Error>
+    fn send_offer<T>(&self, source: &Message, dest: T) -> Result<usize, std::io::Error>
     where
         T: std::net::ToSocketAddrs,
     {
@@ -121,8 +183,13 @@ impl DhcpServer {
          * 'file'     Client boot file name or options      
          * 'options'  options         
          */
-        let yiaddr: Ipv4Addr = todo!();
-        let siaddr: Ipv4Addr = todo!();
+
+        // Still to do but try if pooling works
+        //let yiaddr: Ipv4Addr = todo!();
+        //let siaddr: Ipv4Addr = todo!();
+        
+        let yiaddr: Ipv4Addr = Ipv4Addr::new(0,0,0,0);
+        let siaddr: Ipv4Addr = Ipv4Addr::new(0,0,0,0);
         let response: Message = Message::new(
             OpCode::BOOTREPLY as u8,
             source.htype,
@@ -141,6 +208,7 @@ impl DhcpServer {
             OptionField::new(vec![]),
         );
 
+        println!("INFO: message sended : {}\n", &response);
         // TODO : add apropriate option on the response message and use
         self.send(response, dest)
     }

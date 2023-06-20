@@ -1,6 +1,6 @@
 use serde_derive::{Deserialize, Serialize};
 use toml;
-use std::fs;
+use std::{fs, net::Ipv4Addr};
 use chrono;
 
 const CONFIGURATION_FILENAME: &str = "dhcp-server.toml";
@@ -12,29 +12,31 @@ pub struct Configuration {
 
 #[derive(Deserialize, Serialize)]
 pub struct AddressRange {
-    pub start_address: [u8; 4],
-    pub end_address: [u8; 4],
-    pub subnet_mask: [u8; 4],
+    pub start_address: Ipv4Addr,
+    pub end_address: Ipv4Addr,
+    pub subnet_mask: Ipv4Addr,
 }
 
 impl AddressRange {
-    pub fn new(start_address: [u8; 4], end_address: [u8; 4], subnet_mask: [u8; 4]) -> AddressRange {
+    pub fn new(start_address: Ipv4Addr, end_address: Ipv4Addr, subnet_mask: Ipv4Addr) -> Self {
         AddressRange { start_address, end_address, subnet_mask }
     }
 }
 
+impl Default for Configuration {
+    fn default() -> Self {
+        Configuration {
+            range: AddressRange {
+                start_address: [192,0,0,1].into(),
+                end_address: [192,0,0,100].into(),
+                subnet_mask: [255,255,255,0].into(),
+            }
+        }
+    }
+}
 impl Configuration {
     pub fn new(range: AddressRange) -> Configuration {
         Configuration { range }
-    }
-    pub fn default() -> Configuration {
-        Configuration {
-            range: AddressRange {
-                start_address: [192,0,0,1],
-                end_address: [192,0,0,100],
-                subnet_mask: [255,255,255,0],
-            }
-        }
     }
     pub fn to_toml(&self) -> String {
         toml::to_string(&self).expect("Unable to parse configuration.")
