@@ -1,3 +1,5 @@
+pub mod options;
+
 use crate::configuration::*;
 use std::fmt;
 use std::net::Ipv4Addr;
