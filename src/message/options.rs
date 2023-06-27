@@ -11,9 +11,11 @@ pub struct OptionSubfield {
     pub op_len: u8,
     pub data: Vec<u8>,
 }
+#[repr(u8)]
+#[derive(Debug, Clone)]
 pub enum Option {
-    Pad = 0, 
-    End = 255, 
+    Pad = 0,
+    End = 255,
     SubnetMask = 1,
     TimeOffset = 2,
     Router = 3,
@@ -32,7 +34,7 @@ pub enum Option {
     SwapServer = 16,
     RootPath = 17,
     ExtensionsPath = 18,
-    IPForwarding = 19, // On/Off
+    IPForwarding = 19,          // On/Off
     NonLocalSourceRouting = 20, // On/Off
     PolicyFilter = 21,
     MaximumDatagramReassemblySize = 22,
@@ -74,16 +76,130 @@ pub enum Option {
     RenewalTimeValue = 58,
     RebindingTimeValue = 59,
     ClassIdentifier = 60,
-    ClientIdentifier = 61
+    ClientIdentifier = 61,
+    // I know there is other option but it will
+    // be fine for the moment
 }
 
 impl OptionSubfield {
-    pub fn new(op_code: u8, op_len: u8, data: Vec<u8>) -> OptionSubfield {
-        OptionSubfield {
-            op_code,
+    pub fn new(op: Option, mut data: Vec<u8>) -> Result<OptionSubfield, String> {
+        let op_len: u8;
+        match op {
+            Option::Pad | Option::End => {
+                op_len = 0;
+                data = Vec::new();
+            }
+            Option::SubnetMask
+            | Option::TimeOffset
+            | Option::SwapServer
+            | Option::PathMTUAgingTimeout
+            | Option::BroadcastAddress
+            | Option::RouterSolicitationAddress
+            | Option::ARPCacheTimeout
+            | Option::TCPKeepaliveInterval
+            | Option::NetBIOSOverTCPIPNameServer
+            | Option::NetBIOSOverTCPIPDatagramDistributionServer
+            | Option::RequestedIPAddress
+            | Option::IPAddressLeaseTime
+            | Option::ServerIdentifier
+            | Option::RenewalTimeValue
+            | Option::RebindingTimeValue => {
+                op_len = 4;
+                if data.len() != 4 {
+                    return Err(format!("{:?} must have a data length of 4", op));
+                }
+            }
+            Option::Router
+            | Option::TimeServer
+            | Option::NameServer
+            | Option::DomainNameServer
+            | Option::LogServer
+            | Option::CookieServer
+            | Option::LPR
+            | Option::ImpressServer
+            | Option::ResourceLocationServer
+            | Option::NetworkInformationServers
+            | Option::NetworkTimeProtocolServers
+            | Option::XWindowSystemFontServer
+            | Option::XWindowSystemDisplayManager => {
+                op_len = u8::try_from(data.len()).expect("data is out of bound");
+                if op_len / 4 != 0 && op_len < 4 {
+                    return Err(format!(
+                        "{:?} must have a data length of a multiple of 4",
+                        op
+                    ));
+                }
+            }
+            Option::HostName
+            | Option::MeritDumpFile
+            | Option::DomainName
+            | Option::RootPath
+            | Option::ExtensionsPath
+            | Option::DefaultIpTTL
+            | Option::PerformMaskDiscovery
+            | Option::MaskSupplier
+            | Option::PerformRouterDiscovery
+            | Option::NetworkInformationServiceDomain
+            | Option::VendorSpecificInformation
+            | Option::NetBIOSOverTCPIPScope
+            | Option::ParameterRequestList
+            | Option::Message
+            | Option::ClassIdentifier => {
+                op_len = u8::try_from(data.len()).expect("data is out of bound");
+                if op_len < 1 {
+                    return Err(format!("{:?} can't have empty data", op));
+                }
+            }
+            Option::BootFileSize
+            | Option::MaximumDatagramReassemblySize
+            | Option::InterfaceMTU
+            | Option::MaximumDHCPMessageSize => {
+                op_len = 2;
+                if data.len() != 2 {
+                    return Err(format!("{:?} must have a data length of 2", op));
+                }
+            }
+            Option::IPForwarding
+            | Option::NonLocalSourceRouting
+            | Option::AllSubnetsAreLocal
+            | Option::TrailerEncapsulation
+            | Option::EthernetEncapsulation
+            | Option::TCPDefaultTTL
+            | Option::TCPKeepaliveGarbage
+            | Option::NetBIOSOverTCPIPNodeType
+            | Option::OptionOverload
+            | Option::DHCPMessageType => {
+                op_len = 1;
+                if data.len() != 1 {
+                    return Err(format!("{:?} must have a data length of 1", op));
+                }
+            }
+            Option::PolicyFilter | Option::StaticRoute => {
+                op_len = u8::try_from(data.len()).expect("data is out of bound");
+                if op_len / 8 != 0 && op_len < 8 {
+                    return Err(format!(
+                        "{:?} must have a data length of a multiple of 8",
+                        op
+                    ));
+                }
+            }
+            Option::PathMTUPlateauTable => {
+                op_len = u8::try_from(data.len()).expect("data is out of bound");
+                if op_len / 2 != 0 && op_len < 2 {
+                    return Err(format!(
+                        "{:?} must have a data length of a multiple of 2",
+                        op
+                    ));
+                }
+            }
+            _ => return Err("Unhandled case".into()),
+        }
+
+        Ok(OptionSubfield {
+            op_code: op as u8,
             op_len,
             data,
-        }
+        })
     }
     pub fn from_bytes(input: Vec<u8>) -> OptionSubfield {
         OptionSubfield {
@@ -99,11 +215,9 @@ impl OptionSubfield {
     }
 }
 impl OptionField {
-    pub fn new(
-        options: Vec<OptionSubfield>,
-    ) -> OptionField {
+    pub fn new(options: Vec<OptionSubfield>) -> OptionField {
         OptionField {
-            magic_cookies: [99,130,83,99], // set by rfc 1497
+            magic_cookies: [99, 130, 83, 99], // set by rfc 1497
             options,
         }
     }
