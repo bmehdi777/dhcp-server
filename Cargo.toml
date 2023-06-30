@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.26"
 pretty-hex = "0.3.0"
+rand = "0.8.5"
 serde = "1.0.163"
 serde_derive = "1.0.163"
 toml = "0.7.4"

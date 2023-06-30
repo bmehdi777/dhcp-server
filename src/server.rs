@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, UdpSocket};
 use std::time::Duration; //use pretty_hex::pretty_hex;
+use rand::Rng;
 
 use crate::configuration::*;
 use crate::message::*;
@@ -8,28 +9,18 @@ use crate::message::*;
 // Default lease set to 2h, maybe change that in configuration later ?
 const DEFAULT_LEASE: Duration = Duration::new(7200, 0);
 
-#[derive(PartialEq, Eq, Clone, Copy)]
-pub enum AddrState {
-    FREE,
-    OFFERED,
-    BOUND,
-}
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct Client {
-    state: AddrState,
     address: Ipv4Addr,
     hostname: String,
-    mac: String,
     lease: Duration,
 }
 impl Default for Client {
     fn default() -> Self {
         Client {
-            state: AddrState::FREE,
             address: Ipv4Addr::new(0, 0, 0, 0),
             hostname: String::new(),
-            mac: String::new(),
             lease: DEFAULT_LEASE,
         }
     }
@@ -42,59 +33,69 @@ impl Client {
         }
     }
     pub fn new(
-        state: AddrState,
         address: Ipv4Addr,
         hostname: String,
-        mac: String,
         lease: Duration,
     ) -> Self {
         Client {
-            state,
             address,
             hostname,
-            mac,
             lease,
         }
     }
 }
 
+pub enum ErrorPool {
+    AddressAlreadyAllocated,
+    AddressOutOfRange,
+}
+
 pub struct Pool {
     pub configuration: Configuration,
-    pub reservation: Vec<Client>,
+    pub reservation: HashMap<String, Client>,
+
 }
 impl Pool {
     pub fn new(configuration: Configuration) -> Self {
         Pool {
             configuration,
-            reservation: Vec::new(),
+            reservation: HashMap::new(),
         }
     }
-    pub fn init(mut self) -> Self {
-        let start_addr: u32 = self.configuration.range.start_address.into();
-        let end_addr: u32 = self.configuration.range.end_address.into();
-        let size_addr: u32 = end_addr - start_addr;
-        let mut reservation: Vec<Client> = Vec::new();
-        for i in 0..size_addr {
-            self.reservation.push(Client::init((start_addr + i).into()));
-        }
-        self
-    }
-    pub fn allocate(&mut self, addr: Ipv4Addr) -> Result<Ipv4Addr, &'static str> {
+    fn reserve_ip(&mut self, mac: String) -> Result<&Client, ErrorPool> {
+        let rnd_addr: u32 = rand::thread_rng().gen_range(self.configuration.range.start_address.into()..self.configuration.range.end_address.into());
+        let addr: Ipv4Addr = Ipv4Addr::from(rnd_addr);
+
         todo!()
+        match self.allocate_ip(mac, Client::new(addr, ))
+
     }
-    fn is_free(&self, addr: Ipv4Addr, hardware: String) -> bool {
+    fn allocate_ip(&mut self, mac: String, client: Client) -> Result<Ipv4Addr, ErrorPool> {
+        match self.is_free(client.address) {
+            Err(e) => return Err(e),
+            Ok(is_free) => {
+                if !is_free {
+                    return Err(ErrorPool::AddressAlreadyAllocated);
+                }
+                self.reservation.insert(mac, client.clone());
+                return Ok(client.address);
+            }
+        }
+    }
+    fn is_free(&self, addr: Ipv4Addr) -> Result<bool, ErrorPool> {
         if self.configuration.range.end_address.cmp(&addr) != std::cmp::Ordering::Less
             && self.configuration.range.start_address.cmp(&addr) == std::cmp::Ordering::Less
         {
-            return false;
+            return Err(ErrorPool::AddressOutOfRange);
         }
 
-        for (index, client) in self.reservation.iter().enumerate() {
-            if client.address == addr && client.state == AddrState::FREE {
-                return true;
+        for (mac, client) in self.reservation.iter() {
+            if client.address == addr {
+                return Ok(false);
             }
         }
-        false
+
+        Ok(true)
     }
 }
 
@@ -112,8 +113,7 @@ impl DhcpServer {
             Ipv4Addr::new(192, 168, 0, 1),
             Ipv4Addr::new(192, 168, 0, 10),
             Ipv4Addr::new(255, 255, 255, 0),
-        )))
-        .init();
+        )));
 
         loop {
             let mut buffer = [0; 576];
@@ -141,6 +141,7 @@ impl DhcpServer {
             match dhcp_type {
                 MessageType::DHCPDISCOVER => {
                     // Server should respond with a DHCPOFFER message
+                    
                     self.send_offer(&msg, src_addr);
                 },
                 MessageType::DHCPREQUEST => {
