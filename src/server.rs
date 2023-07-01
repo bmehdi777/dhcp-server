@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::{Ipv4Addr, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 use std::time::Duration; //use pretty_hex::pretty_hex;
 use rand::Rng;
 
@@ -45,6 +45,7 @@ impl Client {
     }
 }
 
+#[derive(Debug)]
 pub enum ErrorPool {
     AddressAlreadyAllocated,
     AddressOutOfRange,
@@ -63,32 +64,27 @@ impl Pool {
         }
     }
     fn reserve_ip(&mut self, mac: String) -> Result<&Client, ErrorPool> {
-        let rnd_addr: u32 = rand::thread_rng().gen_range(self.configuration.range.start_address.into()..self.configuration.range.end_address.into());
-        let addr: Ipv4Addr = Ipv4Addr::from(rnd_addr);
-
-        todo!()
-        match self.allocate_ip(mac, Client::new(addr, ))
+        let mut addr = (&self).random_addr();
+        let mut is_free = false;
+        while !is_free {
+            addr = self.random_addr();
+            is_free = match self.is_free(addr) {
+                Ok(free) => {
+                    // TODO : Try pinging before allocating
+                    free
+                },
+                Err(e) => return Err(e),
+            };
+        }
+        self.reservation.insert(mac.clone(), Client::init(addr));
+        Ok(self.reservation.get(&mac).unwrap())
 
     }
-    fn allocate_ip(&mut self, mac: String, client: Client) -> Result<Ipv4Addr, ErrorPool> {
-        match self.is_free(client.address) {
-            Err(e) => return Err(e),
-            Ok(is_free) => {
-                if !is_free {
-                    return Err(ErrorPool::AddressAlreadyAllocated);
-                }
-                self.reservation.insert(mac, client.clone());
-                return Ok(client.address);
-            }
-        }
+    fn random_addr(&self) -> Ipv4Addr {
+        let rnd_addr: u32 = rand::thread_rng().gen_range(self.configuration.range.start_address.into()..self.configuration.range.end_address.into());
+        Ipv4Addr::from(rnd_addr)
     }
     fn is_free(&self, addr: Ipv4Addr) -> Result<bool, ErrorPool> {
-        if self.configuration.range.end_address.cmp(&addr) != std::cmp::Ordering::Less
-            && self.configuration.range.start_address.cmp(&addr) == std::cmp::Ordering::Less
-        {
-            return Err(ErrorPool::AddressOutOfRange);
-        }
-
         for (mac, client) in self.reservation.iter() {
             if client.address == addr {
                 return Ok(false);
@@ -123,7 +119,7 @@ impl DhcpServer {
                 .expect("ERR: An error occured while receiving bytes");
 
             //println!("Pretty hex : {}", pretty_hex(&buffer));
-            let msg: Message = Message::deserialize(buffer.to_vec());
+            let mut msg: Message = Message::deserialize(buffer.to_vec());
 
             println!("DEBUG: Message received : {}", &msg);
 
@@ -141,8 +137,17 @@ impl DhcpServer {
             match dhcp_type {
                 MessageType::DHCPDISCOVER => {
                     // Server should respond with a DHCPOFFER message
-                    
-                    self.send_offer(&msg, src_addr);
+                    let mac: String = String::from_utf8_lossy(&msg.chaddr).to_string();
+                    let client_offer: Client = match pool.reserve_ip(mac) {
+                        Ok(client) => client.clone(),
+                        Err(e) => {
+                            println!("Error type : {:?}",e);
+                            println!("Unable to reserve an IP : skipping.");
+                            return;
+                        },
+                    };
+                    let yiaddr = client_offer.address;
+                    self.send_offer(&msg, src_addr, yiaddr);
                 },
                 MessageType::DHCPREQUEST => {
                     // Server should respond with a DHCPACK message
@@ -161,7 +166,7 @@ impl DhcpServer {
     {
         self.socket.send_to(&message.serialize(), dest)
     }
-    fn send_offer<T>(&self, source: &Message, dest: T) -> Result<usize, std::io::Error>
+    fn send_offer<T>(&self, source: &Message, dest: T, yiaddr: Ipv4Addr) -> Result<usize, std::io::Error>
     where
         T: std::net::ToSocketAddrs,
     {
@@ -189,9 +194,8 @@ impl DhcpServer {
         //let yiaddr: Ipv4Addr = todo!();
         //let siaddr: Ipv4Addr = todo!();
         
-        let yiaddr: Ipv4Addr = Ipv4Addr::new(0,0,0,0);
         let siaddr: Ipv4Addr = Ipv4Addr::new(0,0,0,0);
-        let response: Message = Message::new(
+        let mut response: Message = Message::new(
             OpCode::BOOTREPLY as u8,
             source.htype,
             source.hlen,
@@ -208,6 +212,8 @@ impl DhcpServer {
             [0u8; 128],
             OptionField::new(vec![]),
         );
+        // TODO : change response to init function
+        // TODO : Add possibility to add option
 
         println!("DEBUG: message sended : {}\n", &response);
         // TODO : add apropriate option on the response message and use
