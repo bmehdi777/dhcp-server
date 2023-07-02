@@ -3,11 +3,14 @@
 mod configuration;
 mod server;
 mod message;
+mod cli;
 
 fn main() {
     //println!("Default configuration example \n{}", configuration::Configuration::default().to_toml());
     // May be usefull when I will look at the broadcast flag
     //socket.set_broadcast(true)?;
+    
+    cli::handle();
     let server = server::DhcpServer::new();
     println!("INFO: server started on 127.0.0.1:67\n");
     server.on_recv();

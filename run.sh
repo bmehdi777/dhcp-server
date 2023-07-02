@@ -7,9 +7,10 @@ if [[ $status != 0 ]]; then
 fi
 
 sysname=$(uname -s)
+confpath=$(readlink -f sample/dhcpd.conf)
 if [[ "$sysname" == "Darwin" ]]; then
-	sudo ./target/release/rdhcp
+	sudo ./target/release/rdhcp --conf $confpath
 else
 	sudo setcap CAP_NET_BIND_SERVICE=eip ./target/release/rdhcp
-	./target/release/rdhcp
+	./target/release/rdhcp --conf $confpath
 fi

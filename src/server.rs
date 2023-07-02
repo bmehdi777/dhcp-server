@@ -1,14 +1,13 @@
+use rand::Rng;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 use std::time::Duration; //use pretty_hex::pretty_hex;
-use rand::Rng;
 
 use crate::configuration::*;
-use crate::message::*;
+use crate::message::{options::*, *};
 
 // Default lease set to 2h, maybe change that in configuration later ?
 const DEFAULT_LEASE: Duration = Duration::new(7200, 0);
-
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct Client {
@@ -32,11 +31,7 @@ impl Client {
             ..Default::default()
         }
     }
-    pub fn new(
-        address: Ipv4Addr,
-        hostname: String,
-        lease: Duration,
-    ) -> Self {
+    pub fn new(address: Ipv4Addr, hostname: String, lease: Duration) -> Self {
         Client {
             address,
             hostname,
@@ -54,7 +49,6 @@ pub enum ErrorPool {
 pub struct Pool {
     pub configuration: Configuration,
     pub reservation: HashMap<String, Client>,
-
 }
 impl Pool {
     pub fn new(configuration: Configuration) -> Self {
@@ -72,16 +66,18 @@ impl Pool {
                 Ok(free) => {
                     // TODO : Try pinging before allocating
                     free
-                },
+                }
                 Err(e) => return Err(e),
             };
         }
         self.reservation.insert(mac.clone(), Client::init(addr));
         Ok(self.reservation.get(&mac).unwrap())
-
     }
     fn random_addr(&self) -> Ipv4Addr {
-        let rnd_addr: u32 = rand::thread_rng().gen_range(self.configuration.range.start_address.into()..self.configuration.range.end_address.into());
+        let rnd_addr: u32 = rand::thread_rng().gen_range(
+            self.configuration.range.start_address.into()
+                ..self.configuration.range.end_address.into(),
+        );
         Ipv4Addr::from(rnd_addr)
     }
     fn is_free(&self, addr: Ipv4Addr) -> Result<bool, ErrorPool> {
@@ -97,11 +93,13 @@ impl Pool {
 
 pub struct DhcpServer {
     socket: UdpSocket,
+    configuration_path: String,
 }
 impl DhcpServer {
-    pub fn new() -> DhcpServer {
+    pub fn new(configuration_path: String) -> DhcpServer {
         DhcpServer {
             socket: UdpSocket::bind("127.0.0.1:67").expect("ERR: unable to bind the port 67"),
+            configuration_path
         }
     }
     pub fn on_recv(&self) {
@@ -109,7 +107,7 @@ impl DhcpServer {
             Ipv4Addr::new(192, 168, 0, 1),
             Ipv4Addr::new(192, 168, 0, 10),
             Ipv4Addr::new(255, 255, 255, 0),
-        )));
+        ), self.configuration_path));
 
         loop {
             let mut buffer = [0; 576];
@@ -141,18 +139,17 @@ impl DhcpServer {
                     let client_offer: Client = match pool.reserve_ip(mac) {
                         Ok(client) => client.clone(),
                         Err(e) => {
-                            println!("Error type : {:?}",e);
+                            println!("Error type : {:?}", e);
                             println!("Unable to reserve an IP : skipping.");
                             return;
-                        },
+                        }
                     };
                     let yiaddr = client_offer.address;
                     self.send_offer(&msg, src_addr, yiaddr);
-                },
+                }
                 MessageType::DHCPREQUEST => {
                     // Server should respond with a DHCPACK message
-
-                },
+                }
                 MessageType::DHCPRELEASE => {
                     // Release address
                 }
@@ -166,7 +163,12 @@ impl DhcpServer {
     {
         self.socket.send_to(&message.serialize(), dest)
     }
-    fn send_offer<T>(&self, source: &Message, dest: T, yiaddr: Ipv4Addr) -> Result<usize, std::io::Error>
+    fn send_offer<T>(
+        &self,
+        source: &Message,
+        dest: T,
+        yiaddr: Ipv4Addr,
+    ) -> Result<usize, std::io::Error>
     where
         T: std::net::ToSocketAddrs,
     {
@@ -189,12 +191,10 @@ impl DhcpServer {
          * 'file'     Client boot file name or options      
          * 'options'  options         
          */
-
         // Still to do but try if pooling works
         //let yiaddr: Ipv4Addr = todo!();
         //let siaddr: Ipv4Addr = todo!();
-        
-        let siaddr: Ipv4Addr = Ipv4Addr::new(0,0,0,0);
+        let siaddr: Ipv4Addr = Ipv4Addr::new(0, 0, 0, 0);
         let mut response: Message = Message::new(
             OpCode::BOOTREPLY as u8,
             source.htype,
@@ -211,9 +211,8 @@ impl DhcpServer {
             [0u8; 64],
             [0u8; 128],
             OptionField::new(vec![]),
-        );
-        // TODO : change response to init function
-        // TODO : Add possibility to add option
+        )
+        .add_options(OptionSubfield::new(Option::DHCPMessageType, vec![2]).unwrap());
 
         println!("DEBUG: message sended : {}\n", &response);
         // TODO : add apropriate option on the response message and use
